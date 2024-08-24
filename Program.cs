@@ -14,8 +14,11 @@ public class Program
         Host.CreateDefaultBuilder(args)
             .ConfigureWebHostDefaults(webBuilder =>
             {
+                webBuilder.UseKestrel(options =>
+                {
+                    options.ListenAnyIP(5000); // HTTP port
+                });
                 webBuilder.UseStartup<Startup>();
-                webBuilder.UseUrls("http://localhost:5000"); // Explicitly set the URL
             })
             .UseConsoleLifetime()
             .ConfigureServices((hostContext, services) =>

@@ -28,14 +28,10 @@ public class Startup
         {
             options.AddDefaultPolicy(builder =>
             {
-                var origins = Configuration["AllowedOrigins"];
-                if (!string.IsNullOrEmpty(origins))
-                {
-                    builder.WithOrigins(origins.Split(','))
-                           .AllowAnyMethod()
-                           .AllowAnyHeader()
-                           .AllowCredentials();
-                }
+                builder.WithOrigins("https://soc.stellargate.io")
+                       .AllowAnyMethod()
+                       .AllowAnyHeader()
+                       .AllowCredentials();
             });
         });
 
@@ -61,7 +57,9 @@ public class Startup
             app.UseHsts();
         }
 
-        app.UseHttpsRedirection();
+        // Remove HTTPS redirection as it's handled by Nginx
+        // app.UseHttpsRedirection();
+
         app.UseStaticFiles();
 
         app.UseRouting();

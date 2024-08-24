@@ -482,19 +482,19 @@
     ]
   },
   "packageFolders": {
-    "/Users/hydrazkiller/.nuget/packages/": {}
+    "/home/ubuntu/.nuget/packages/": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/Users/hydrazkiller/MiniGameCSharp/MarsMinigameServer/MarsMinigameServer.csproj",
+      "projectUniqueName": "/home/ubuntu/minigame/minigameC/MarsMinigameServer.csproj",
       "projectName": "MarsMinigameServer",
-      "projectPath": "/Users/hydrazkiller/MiniGameCSharp/MarsMinigameServer/MarsMinigameServer.csproj",
-      "packagesPath": "/Users/hydrazkiller/.nuget/packages/",
-      "outputPath": "/Users/hydrazkiller/MiniGameCSharp/MarsMinigameServer/obj/",
+      "projectPath": "/home/ubuntu/minigame/minigameC/MarsMinigameServer.csproj",
+      "packagesPath": "/home/ubuntu/.nuget/packages/",
+      "outputPath": "/home/ubuntu/minigame/minigameC/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "/Users/hydrazkiller/.nuget/NuGet/NuGet.Config"
+        "/home/ubuntu/.nuget/NuGet/NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
@@ -551,7 +551,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.401/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/8.0.401/PortableRuntimeIdentifierGraph.json"
       }
     }
   }
