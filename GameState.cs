@@ -21,6 +21,8 @@ public class GameState
     public DateTime? MatchStartTime { get; set; }
     public DateTime? IntermissionStartTime { get; set; }
 
+    private static readonly Random random = new Random();
+
     public GameState()
     {
         ResetGameState();
@@ -76,6 +78,25 @@ public class GameState
         }
 
         return points;
+    }
+
+    public Position CalculateSpawnArea(int hq)
+    {
+        var hqPosition = HQs[hq].Position;
+        double angle = hq == 1 ? Math.PI / 4 : 5 * Math.PI / 4; // Angle facing away from the corner
+        double radius = 10; // Adjust this value to change the spawn area size
+
+        double randomAngle = angle + (random.NextDouble() - 0.5) * Math.PI / 2; // Random angle within a quarter circle
+        double randomRadius = radius * Math.Sqrt(random.NextDouble()); // Random radius for uniform distribution
+
+        double x = hqPosition.X + randomRadius * Math.Cos(randomAngle);
+        double y = hqPosition.Y + randomRadius * Math.Sin(randomAngle);
+
+        return new Position
+        {
+            X = Math.Clamp(x, 0, MapSize),
+            Y = Math.Clamp(y, 0, MapSize)
+        };
     }
 
     public void UpdateCapturePointStatus(CapturePoint capturePoint)
@@ -164,7 +185,7 @@ public class GameState
             Console.WriteLine($"HQ{tank.HQ} tank {tank.Id} health: {tank.Health}");
             if (tank.Health <= 0)
             {
-                var killerTank = enemyTanks.Count > 0 ? enemyTanks[new Random().Next(enemyTanks.Count)] : null;
+                var killerTank = enemyTanks.Count > 0 ? enemyTanks[random.Next(enemyTanks.Count)] : null;
                 DestroyTank(tank, killerTank, capturePoint);
                 tanks.Remove(tank);
                 capturePoint.Tanks[tank.HQ]--;

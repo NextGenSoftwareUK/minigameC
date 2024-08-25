@@ -11,6 +11,7 @@ public class GameHub : Hub
 {
     private readonly GameState _gameState;
     private readonly ILogger<GameHub> _logger;
+    private static readonly Random _random = new Random();
 
     public GameHub(GameState gameState, ILogger<GameHub> logger)
     {
@@ -53,12 +54,14 @@ public class GameHub : Hub
                 return;
             }
 
+            var spawnPosition = CalculateRandomSpawnPosition(hqData.Position, hq);
+
             var newTank = new Tank
             {
                 Id = _gameState.Tanks.Count + 1,
                 Owner = walletAddress,
                 HQ = hq,
-                Position = new Position { X = hqData.Position.X, Y = hqData.Position.Y },
+                Position = spawnPosition,
                 CapturePointId = null,
                 MovingTo = null,
                 Rotation = 0,
@@ -80,15 +83,27 @@ public class GameHub : Hub
                 ArtilleryStrikesAvailable = 1
             };
 
-            UpdateHQTankCount(hq, 1);
             await Clients.All.SendAsync("gameUpdate", GetSimplifiedGameState());
-            await Clients.All.SendAsync("tankSpawned", new { walletAddress, hq, timestamp = DateTime.UtcNow });
-            _logger.LogInformation("Tank spawned for {WalletAddress} in HQ {HQ}", walletAddress, hq);
+            await Clients.All.SendAsync("tankSpawned", new { walletAddress, hq, position = spawnPosition, timestamp = DateTime.UtcNow });
+            _logger.LogInformation("Tank spawned for {WalletAddress} in HQ {HQ} at position ({X}, {Y})", walletAddress, hq, spawnPosition.X, spawnPosition.Y);
         }
         else
         {
             _logger.LogError("Invalid player address or HQ: {WalletAddress}, HQ: {HQ}", walletAddress, hq);
         }
+    }
+
+    private Position CalculateRandomSpawnPosition(Position hqPosition, int hq)
+    {
+        double radius = 10; // Adjust this value to change the spawn area size
+        double angle = hq == 1 ? Math.PI / 4 : 5 * Math.PI / 4; // Angle facing away from the corner
+        double randomAngle = angle + (_random.NextDouble() - 0.5) * Math.PI / 2; // Random angle within a quarter circle
+        double randomRadius = radius * Math.Sqrt(_random.NextDouble()); // Random radius for uniform distribution
+
+        double x = hqPosition.X + randomRadius * Math.Cos(randomAngle);
+        double y = hqPosition.Y + randomRadius * Math.Sin(randomAngle);
+
+        return new Position { X = Math.Clamp(x, 0, GameState.MapSize), Y = Math.Clamp(y, 0, GameState.MapSize) };
     }
 
     public async Task MoveTank(string walletAddress, int capturePointId, DateTime actionTimestamp)
@@ -101,12 +116,12 @@ public class GameHub : Hub
         }
 
         var tank = _gameState.Tanks.FirstOrDefault(t => t.Owner == walletAddress);
-        if (tank != null && tank.MovingTo == null && tank.Health > 0)
+        if (tank != null && tank.Health > 0)
         {
             var capturePoint = _gameState.CapturePoints.FirstOrDefault(cp => cp.Id == capturePointId);
             if (capturePoint != null)
             {
-                // Remove tank from current capture point or HQ
+                // Remove tank from current capture point or HQ if it's already moving
                 if (tank.CapturePointId != null)
                 {
                     var currentPoint = _gameState.CapturePoints.FirstOrDefault(cp => cp.Id == tank.CapturePointId);
@@ -159,7 +174,7 @@ public class GameHub : Hub
         }
 
         var tank = _gameState.Tanks.FirstOrDefault(t => t.Owner == walletAddress);
-        if (tank != null && tank.MovingTo == null && tank.Health > 0)
+        if (tank != null && tank.Health > 0)
         {
             if (_gameState.HQs.TryGetValue(tank.HQ, out var hq))
             {
