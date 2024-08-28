@@ -74,7 +74,7 @@ public class GameHub : Hub
             };
 
             _gameState.Tanks.Add(newTank);
-            _gameState.Players[walletAddress] = new Player
+            _gameState.Players[walletAddress] = new Player(_gameState.HoloNETClient)
             {
                 WalletAddress = walletAddress,
                 HQ = hq,

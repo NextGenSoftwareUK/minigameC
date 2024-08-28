@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.IO;
+using NextGenSoftware.Holochain.HoloNET.Client;
+using NextGenSoftware.Holochain.HoloNET.ORM.Entries;
+using NextGenSoftware.Holochain.HoloNET.Client.Interfaces;
 
 public class GameState
 {
@@ -20,12 +23,79 @@ public class GameState
     public bool MatchInProgress { get; set; } = false;
     public DateTime? MatchStartTime { get; set; }
     public DateTime? IntermissionStartTime { get; set; }
+    public IHoloNETClientAdmin HoloNETClientAdmin { get; private set; } = new HoloNETClientAdmin();
+    public IHoloNETClientAppAgent HoloNETClient { get; private set; }
 
     private static readonly Random random = new Random();
+
+    private const string HAPP_ID = "mars_mini_game";
+    private const string HAPP_PATH = "mars_mini_game";
+    private const string HAPP_ROLE = "mars_mini_game_role";
+    private bool _holoNETReady = false;
 
     public GameState()
     {
         ResetGameState();
+        _holoNETReady = Task.Run(InitHoloNETAsync).Result;
+    }
+
+    private async Task<bool> InitHoloNETAsync()
+    {
+        bool adminConnected = false;
+        string errorMessage = "Error Occured In GaneState.InitHoloNET method. Reason: ";
+        bool holoNETReady = false;
+
+        try
+        {
+            HoloNETClientAdmin.OnError += _holoNETClientAdmin_OnError;
+
+            if (HoloNETClientAdmin.State == System.Net.WebSockets.WebSocketState.Open)
+                adminConnected = true;
+
+            else if (!HoloNETClientAdmin.IsConnecting)
+            {
+                HoloNETConnectedEventArgs adminConnectResult = await HoloNETClientAdmin.ConnectAsync();
+
+                if (adminConnectResult != null && !adminConnectResult.IsError && adminConnectResult.IsConnected)
+                    adminConnected = true;
+                else
+                    HandleError($"{errorMessage}Error Occured Connecting To HoloNETClientAdmin EndPoint {HoloNETClientAdmin.EndPoint.AbsoluteUri}. Reason: {adminConnectResult.Message}");
+            }
+
+            if (adminConnected)
+            {
+                if (HoloNETClient == null)
+                {
+                    InstallEnableSignAttachAndConnectToHappEventArgs installedAppResult = await HoloNETClientAdmin.InstallEnableSignAttachAndConnectToHappAsync(HAPP_ID, HAPP_PATH, HAPP_ROLE);
+
+                    if (installedAppResult != null && installedAppResult.IsSuccess && !installedAppResult.IsError)
+                    {
+                        HoloNETClient = installedAppResult.HoloNETClientAppAgent;
+                        holoNETReady = true;
+                    }
+                    else
+                        HandleError($"{errorMessage}Error Occured Calling InstallEnableSignAttachAndConnectToHappAsync On HoloNETClientAppAgent EndPoint {HoloNETClientAdmin.EndPoint.AbsoluteUri}. Reason: {installedAppResult.Message}");
+                }
+                else if (HoloNETClient.State != System.Net.WebSockets.WebSocketState.Open)
+                {
+                    HoloNETConnectedEventArgs connectedResult = await HoloNETClient.ConnectAsync();
+
+                    if (connectedResult != null && !connectedResult.IsError && connectedResult.IsConnected)
+                        holoNETReady = true;
+                    else
+                        HandleError($"{errorMessage}Error Occured Connecting To HoloNETClientAppAgent EndPoint {HoloNETClient.EndPoint.AbsoluteUri}. Reason: {connectedResult.Message}");
+                }
+            }
+
+            if (HoloNETClient != null)
+                HoloNETClient.OnError += _holoNETClient_OnError;
+        }
+        catch (Exception e)
+        {
+            HandleError($"{errorMessage}{e}");
+        }
+
+        return holoNETReady;
     }
 
     public void ResetGameState()
@@ -222,11 +292,48 @@ public class GameState
         Console.WriteLine($"Tank {tank.Id} destroyed at position ({tank.Position.X}, {tank.Position.Y})");
     }
 
-    public void SaveState()
+    public async Task SaveState()
     {
+        string errorMessage = "Error Occured In GaneState.SaveState method. Reason:";
+
         var json = JsonSerializer.Serialize(this);
         File.WriteAllText("gamestate.json", json);
         Console.WriteLine("Game state saved to gamestate.json");
+
+        if (_holoNETReady)
+        {
+            foreach (Player player in this.Players.Values) 
+            {
+                ZomeFunctionCallBackEventArgs saveResult = await player.SaveAsync();
+
+                if (saveResult != null && saveResult.IsError)
+                    HandleError($"{errorMessage} Error Occured Saving Player. Reason: {saveResult.Message}");
+            }
+
+            foreach (HQ hq in this.HQs.Values)
+            {
+                ZomeFunctionCallBackEventArgs saveResult = await hq.SaveAsync();
+
+                if (saveResult != null && saveResult.IsError)
+                    HandleError($"{errorMessage} Error Occured Saving HQ. Reason: {saveResult.Message}");
+            }
+
+            foreach (Tank tank in this.Tanks)
+            {
+                ZomeFunctionCallBackEventArgs saveResult = await tank.SaveAsync();
+
+                if (saveResult != null && saveResult.IsError)
+                    HandleError($"{errorMessage} Error Occured Saving Tank. Reason: {saveResult.Message}");
+            }
+
+            foreach (CapturePoint capturePoint in this.CapturePoints)
+            {
+                ZomeFunctionCallBackEventArgs saveResult = await capturePoint.SaveAsync();
+
+                if (saveResult != null && saveResult.IsError)
+                    HandleError($"{errorMessage} Error Occured Saving CapturePoint. Reason: {saveResult.Message}");
+            }
+        }
     }
 
     public void LoadState()
@@ -254,25 +361,58 @@ public class GameState
             ResetGameState();
         }
     }
+
+    private void _holoNETClient_OnError(object sender, HoloNETErrorEventArgs e)
+    {
+        HandleError($"Error Occured In GameState._holoNETClient_OnError Event Handler: {e.Reason}");
+    }
+
+    private void _holoNETClientAdmin_OnError(object sender, HoloNETErrorEventArgs e)
+    {
+        HandleError($"Error Occured In GameState._holoNETClientAdmin_OnError Event Handler: {e.Reason}");
+    }
+
+    private void HandleError(string errorMessage)
+    {
+        //TODO: Add error handling/logging here.
+    }
 }
 
-public class Player
+public class Player : HoloNETAuditEntryBase
 {
+    public Player() : base("mars_mini_game", "load_player", "create_player", "update_player", "delete_player") { }
+    public Player(IHoloNETClientAppAgent holoNETClient) : base("mars_mini_game", "load_player", "create_player", "update_player", "delete_player", holoNETClient) { }
+
+    [HolochainRustFieldName("wallet_address")]
     public required string WalletAddress { get; set; }
+
+    [HolochainRustFieldName("hq")]
     public int HQ { get; set; }
+
+    [HolochainRustFieldName("tank_id")]
     public int TankId { get; set; }
+
+    [HolochainRustFieldName("scans")]
     public int Scans { get; set; }
+
+    [HolochainRustFieldName("artillery_strikes_available")]
     public int ArtilleryStrikesAvailable { get; set; }
 }
 
-public class HQ
+public class HQ : HoloNETAuditEntryBase
 {
+    public HQ() : base("mars_mini_game", "load_hq", "create_hq", "update_hq", "delete_hq") { }
+    public HQ(IHoloNETClientAppAgent holoNETClient) : base("mars_mini_game", "load_hq", "create_hq", "update_hq", "delete_hq", holoNETClient) { }
+
     public required Position Position { get; set; }
     public int Tanks { get; set; }
 }
 
-public class Tank
+public class Tank : HoloNETAuditEntryBase
 {
+    public Tank() : base("mars_mini_game", "load_tank", "create_tank", "update_tank", "delete_tank") { }
+    public Tank(IHoloNETClientAppAgent holoNETClient) : base("mars_mini_game", "load_tank", "create_tank", "update_tank", "delete_tank", holoNETClient) { }
+
     public int Id { get; set; }
     public required string Owner { get; set; }
     public int HQ { get; set; }
@@ -288,8 +428,11 @@ public class Tank
     public int EnemyKills { get; set; }
 }
 
-public class CapturePoint
+public class CapturePoint : HoloNETAuditEntryBase
 {
+    public CapturePoint() : base("mars_mini_game", "load_capture_point", "create_capture_point", "update_capture_point", "delete_capture_point") { }
+    public CapturePoint(IHoloNETClientAppAgent holoNETClient) : base("mars_mini_game", "load_capture_point", "create_capture_point", "update_capture_point", "delete_capture_point", holoNETClient) { }
+
     public int Id { get; set; }
     public required Position Position { get; set; }
     public int? ControlledBy { get; set; }
@@ -299,8 +442,11 @@ public class CapturePoint
     public DateTime? CaptureTime { get; set; }
 }
 
-public class Position
+public class Position : HoloNETAuditEntryBase
 {
+    public Position() : base("mars_mini_game", "load_position", "create_position", "update_position", "delete_position") { }
+    public Position(IHoloNETClientAppAgent holoNETClient) : base("mars_mini_game", "load_position", "create_position", "update_position", "delete_position", holoNETClient) { }
+
     public double X { get; set; }
     public double Y { get; set; }
 }
